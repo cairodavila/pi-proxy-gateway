@@ -2,23 +2,30 @@
  * Configuration loading and validation
  */
 
-import { readFileSync, existsSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, copyFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import type { ProxyConfig } from "./types.js";
 
-export const CONFIG_PATH = join(homedir(), ".pi", "model-proxy.json");
+export const CONFIG_PATH = join(homedir(), ".pi", "proxy-gateway.json");
+/** Config path used by @blackbelt-technology/pi-model-proxy; migrated on first run. */
+export const LEGACY_CONFIG_PATH = join(homedir(), ".pi", "model-proxy.json");
 
 export const DEFAULT_CONFIG: ProxyConfig = {
 	port: 9876,
-	requestTimeoutMs: 120000,
+	host: "127.0.0.1",
+	requestTimeoutMs: 1800000,
 };
 
 /**
- * Load config from ~/.pi/model-proxy.json, creating defaults if missing.
+ * Load config from ~/.pi/proxy-gateway.json, creating defaults if missing.
+ * An existing ~/.pi/model-proxy.json (from pi-model-proxy) is copied over once.
  * Validates alias values contain '/' separator.
  */
 export function loadConfig(configPath: string = CONFIG_PATH): ProxyConfig {
+	if (!existsSync(configPath) && configPath === CONFIG_PATH && existsSync(LEGACY_CONFIG_PATH)) {
+		copyFileSync(LEGACY_CONFIG_PATH, configPath);
+	}
 	if (!existsSync(configPath)) {
 		writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2), "utf-8");
 		return { ...DEFAULT_CONFIG };

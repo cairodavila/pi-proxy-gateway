@@ -1,14 +1,20 @@
 {
-  "name": "@blackbelt-technology/pi-model-proxy",
-  "version": "0.2.0",
-  "description": "Pi extension that exposes pi's authenticated models as a local OpenAI-compatible and Anthropic-compatible API server",
+  "name": "pi-proxy-gateway",
+  "version": "0.3.0",
+  "description": "Use the models pi can reach, including your ChatGPT and Claude subscriptions, from any OpenAI- or Anthropic-compatible app.",
   "type": "module",
   "main": "index.ts",
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
   "files": [
     "index.ts",
     "src/",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "vitest run",
@@ -17,27 +23,31 @@
   "keywords": [
     "pi-package",
     "pi-extension",
-    "openai-proxy",
-    "anthropic-proxy",
+    "openai-compatible",
+    "anthropic-compatible",
     "llm-proxy",
-    "model-proxy"
+    "chatgpt",
+    "codex",
+    "claude",
+    "open-webui"
   ],
+  "author": "cairo d'avila",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/BlackBeltTechnology/pi-model-proxy.git"
+    "url": "git+https://github.com/cairodavila/pi-proxy-gateway.git"
   },
-  "homepage": "https://github.com/BlackBeltTechnology/pi-model-proxy#readme",
+  "homepage": "https://github.com/cairodavila/pi-proxy-gateway#readme",
   "bugs": {
-    "url": "https://github.com/BlackBeltTechnology/pi-model-proxy/issues"
+    "url": "https://github.com/cairodavila/pi-proxy-gateway/issues"
   },
   "peerDependencies": {
-    "@mariozechner/pi-ai": ">=0.60.0",
-    "@mariozechner/pi-coding-agent": ">=0.60.0"
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "@mariozechner/pi-ai": "*",
-    "@mariozechner/pi-coding-agent": "*",
+    "@earendil-works/pi-ai": "0.86.1",
+    "@earendil-works/pi-coding-agent": "0.86.1",
     "vitest": "^4.1.2"
   }
 }

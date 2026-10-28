@@ -7,7 +7,8 @@ import type {
 	AssistantMessage,
 	TextContent,
 	ToolCall,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
+import { toOpenAIUsage } from "./usage.js";
 
 /**
  * Track tool call indices across the stream for proper multi-tool-call support.
@@ -41,6 +42,7 @@ export function eventToSSEChunks(
 	model: string,
 	msgId: string,
 	tracker: ToolCallIndexTracker,
+	includeUsage = true,
 ): string[] {
 	const chunks: string[] = [];
 
@@ -99,18 +101,16 @@ export function eventToSSEChunks(
 			const finishReason = msg.stopReason === "toolUse" ? "tool_calls"
 				: msg.stopReason === "length" ? "length"
 				: "stop";
-			const usage = {
-				prompt_tokens: msg.usage.input,
-				completion_tokens: msg.usage.output,
-				total_tokens: msg.usage.input + msg.usage.output,
-			};
-			chunks.push(makeChunk({}, finishReason, usage));
+			chunks.push(makeChunk({}, finishReason, includeUsage ? toOpenAIUsage(msg.usage) : undefined));
 			chunks.push("data: [DONE]\n\n");
 			break;
 		}
 
 		case "error": {
-			chunks.push(makeChunk({}, "stop"));
+			// Surface provider errors instead of ending the stream as a silent "stop".
+			const message = (event as any).error?.errorMessage || "Provider error";
+			chunks.push(`data: ${JSON.stringify({ error: { message, type: "provider_error" } })}\n\n`);
+			chunks.push(makeChunk({}, "stop", toOpenAIUsage((event as any).error?.usage)));
 			chunks.push("data: [DONE]\n\n");
 			break;
 		}
@@ -126,10 +126,15 @@ export function eventToNonStreamingResponse(finalMsg: AssistantMessage, model: s
 	const textParts = finalMsg.content.filter(c => c.type === "text") as TextContent[];
 	const toolCalls = finalMsg.content.filter(c => c.type === "toolCall") as ToolCall[];
 
+	const thinking = finalMsg.content
+		.filter((c: any) => c.type === "thinking")
+		.map((c: any) => c.thinking)
+		.join("");
 	const message: any = {
 		role: "assistant",
 		content: textParts.map(t => t.text).join("") || null,
 	};
+	if (thinking) message.reasoning_content = thinking;
 
 	if (toolCalls.length > 0) {
 		message.tool_calls = toolCalls.map((tc, i) => ({
@@ -151,10 +156,6 @@ export function eventToNonStreamingResponse(finalMsg: AssistantMessage, model: s
 				: finalMsg.stopReason === "length" ? "length"
 				: "stop",
 		}],
-		usage: {
-			prompt_tokens: finalMsg.usage.input,
-			completion_tokens: finalMsg.usage.output,
-			total_tokens: finalMsg.usage.input + finalMsg.usage.output,
-		},
+		usage: toOpenAIUsage(finalMsg.usage),
 	};
 }

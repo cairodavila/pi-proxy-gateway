@@ -5,7 +5,7 @@ import { tmpdir } from "os";
 import { loadConfig, resolveModelAlias } from "../src/config.js";
 import type { ProxyConfig } from "../src/types.js";
 
-const TEST_DIR = join(tmpdir(), "pi-model-proxy-test-" + Date.now());
+const TEST_DIR = join(tmpdir(), "pi-proxy-gateway-test-" + Date.now());
 const TEST_CONFIG = join(TEST_DIR, "config.json");
 
 beforeEach(() => {
@@ -20,7 +20,7 @@ describe("loadConfig", () => {
 	it("creates default config when file does not exist", () => {
 		const config = loadConfig(TEST_CONFIG);
 		expect(config.port).toBe(9876);
-		expect(config.requestTimeoutMs).toBe(120000);
+		expect(config.requestTimeoutMs).toBe(1800000);
 		expect(existsSync(TEST_CONFIG)).toBe(true);
 	});
 
@@ -36,7 +36,7 @@ describe("loadConfig", () => {
 		expect(config.defaultModel).toBe("anthropic/claude-sonnet-4-5-20250929");
 		expect(config.apiKey).toBe("test-key");
 		expect(config.rateLimit).toBe(60);
-		expect(config.requestTimeoutMs).toBe(120000); // default preserved
+		expect(config.requestTimeoutMs).toBe(1800000); // default preserved
 	});
 
 	it("returns defaults for invalid JSON", () => {

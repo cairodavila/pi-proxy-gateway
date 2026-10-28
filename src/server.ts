@@ -70,7 +70,7 @@ export function createProxyServer(deps: ServerDependencies): Server {
 
 		// Health check — always available, no auth, no rate limit
 		if (path === "/health" || path === "/") {
-			return jsonResponse(res, 200, { status: "ok", service: "pi-model-proxy" });
+			return jsonResponse(res, 200, { status: "ok", service: "pi-proxy-gateway" });
 		}
 
 		const startTime = Date.now();
@@ -99,7 +99,7 @@ export function createProxyServer(deps: ServerDependencies): Server {
 
 		// Create AbortController for timeout + client disconnect
 		const controller = new AbortController();
-		const timeoutMs = config.requestTimeoutMs || 120000;
+		const timeoutMs = config.requestTimeoutMs || 1800000;
 		const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
 		res.on("close", () => {

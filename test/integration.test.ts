@@ -10,13 +10,13 @@
 
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import http from "http";
-import type { AssistantMessageEvent } from "@mariozechner/pi-ai";
+import type { AssistantMessageEvent } from "@earendil-works/pi-ai";
 
 // Mock streamSimple before importing server
 let mockStreamEvents: AssistantMessageEvent[] = [];
 
-vi.mock("@mariozechner/pi-ai", async () => {
-	const actual = await vi.importActual("@mariozechner/pi-ai");
+vi.mock("@earendil-works/pi-ai/compat", async () => {
+	const actual = await vi.importActual("@earendil-works/pi-ai/compat");
 	return {
 		...actual,
 		streamSimple: vi.fn(async function* () {
@@ -375,5 +375,88 @@ describe("Integration: GET /v1/models", () => {
 		expect(data.data).toHaveLength(1);
 		expect(data.data[0].id).toBe("test-provider/test-model");
 		expect(data.data[0].owned_by).toBe("test-provider");
+	});
+});
+
+describe("Integration: registry.streamSimple path + option passthrough", () => {
+	let server: http.Server;
+	const port = 29879;
+	let captured: { model: any; context: any; options: any } | undefined;
+	const usage = { input: 100, output: 50, cacheRead: 9000, cacheWrite: 400, reasoning: 30, totalTokens: 9550, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+
+	function registryWithStream() {
+		return {
+			...createMockRegistry(),
+			streamSimple: (model: any, context: any, options: any) => {
+				captured = { model, context, options };
+				return (async function* () {
+					yield { type: "start", partial: { role: "assistant", content: [] } } as any;
+					yield { type: "text_delta", delta: "hi", partial: { role: "assistant", content: [{ type: "text", text: "hi" }] } } as any;
+					yield { type: "done", reason: "stop", message: { role: "assistant", content: [{ type: "text", text: "hi" }], stopReason: "stop", usage } } as any;
+				})();
+			},
+		};
+	}
+
+	beforeAll(async () => {
+		server = createProxyServer({ config: { port }, getModelRegistry: registryWithStream });
+		await new Promise<void>((r) => server.listen(port, r));
+	});
+	afterAll(async () => {
+		await new Promise<void>((r) => server.close(() => r()));
+	});
+
+	it("forwards reasoning, sampling, tool_choice, token caps and chat id; does not pass auth itself", async () => {
+		const res = await request(port, "POST", "/v1/chat/completions", {
+			headers: { "X-OpenWebUI-Chat-Id": "chat-abc" },
+			body: {
+				model: "test-provider/test-model",
+				messages: [{ role: "user", content: "hi" }],
+				reasoning_effort: "xhigh",
+				max_completion_tokens: 4096,
+				temperature: 0.3,
+				top_p: 0.9,
+				stop: "END",
+				tool_choice: "none",
+				stream: false,
+			},
+		});
+		expect(res.status).toBe(200);
+		expect(captured!.options.reasoning).toBe("xhigh");
+		expect(captured!.options.maxTokens).toBe(4096);
+		expect(captured!.options.temperature).toBe(0.3);
+		expect(captured!.options.toolChoice).toBe("none");
+		expect(captured!.options.samplingParams).toEqual({ top_p: 0.9, stop: ["END"] });
+		expect(captured!.options.sessionId).toBe("chat-abc");
+		expect(captured!.options.apiKey).toBeUndefined();
+		const data = JSON.parse(res.body);
+		expect(data.usage.prompt_tokens).toBe(9500);
+		expect(data.usage.prompt_tokens_details.cached_tokens).toBe(9000);
+		expect(data.usage.completion_tokens_details.reasoning_tokens).toBe(30);
+	});
+
+	it("does not request reasoning when none is sent (pi-ai per-model default)", async () => {
+		await request(port, "POST", "/v1/chat/completions", {
+			body: { model: "test-provider/test-model", messages: [{ role: "user", content: "hi" }], stream: false },
+		});
+		expect("reasoning" in captured!.options).toBe(false);
+		expect("sessionId" in captured!.options).toBe(false);
+	});
+
+	it("streams usage in the final chunk with cached tokens included", async () => {
+		const res = await request(port, "POST", "/v1/chat/completions", {
+			body: { model: "test-provider/test-model", messages: [{ role: "user", content: "hi" }], stream: true, stream_options: { include_usage: true } },
+		});
+		const lines = res.body.split("\n").filter((l) => l.startsWith("data: ") && !l.includes("[DONE]"));
+		const last = JSON.parse(lines[lines.length - 1].slice(6));
+		expect(last.usage.prompt_tokens).toBe(9500);
+		expect(last.choices[0].finish_reason).toBe("stop");
+	});
+
+	it("maps Anthropic output_config.effort on /v1/messages", async () => {
+		await request(port, "POST", "/v1/messages", {
+			body: { model: "test-provider/test-model", max_tokens: 1000, messages: [{ role: "user", content: "hi" }], output_config: { effort: "max" } },
+		});
+		expect(captured!.options.reasoning).toBe("max");
 	});
 });

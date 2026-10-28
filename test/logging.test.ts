@@ -5,7 +5,7 @@ import { tmpdir } from "os";
 import { RequestLogger } from "../src/logging.js";
 import type { RequestLogEntry } from "../src/types.js";
 
-const TEST_DIR = join(tmpdir(), "pi-model-proxy-log-test-" + Date.now());
+const TEST_DIR = join(tmpdir(), "pi-proxy-gateway-log-test-" + Date.now());
 const LOG_PATH = join(TEST_DIR, "subdir", "test.jsonl");
 
 afterEach(() => {

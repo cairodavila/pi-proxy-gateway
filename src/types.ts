@@ -1,5 +1,5 @@
 /**
- * Shared type definitions for pi-model-proxy
+ * Shared type definitions for pi-proxy-gateway
  */
 
 // =============================================================================
@@ -9,6 +9,8 @@
 export interface ProxyConfig {
 	/** Port for the local API server (default: 9876) */
 	port: number;
+	/** Interface to bind (default: 127.0.0.1). Use 0.0.0.0 to accept connections from other machines or containers. */
+	host?: string;
 	/** Default model in "provider/model-id" format */
 	defaultModel?: string;
 	/** Optional API key to protect the proxy endpoint */
@@ -19,9 +21,9 @@ export interface ProxyConfig {
 	aliases?: Record<string, string>;
 	/** Per-minute request rate limit (0 or undefined = disabled) */
 	rateLimit?: number;
-	/** Request timeout in milliseconds (default: 120000) */
+	/** Request timeout in milliseconds (default: 1800000) */
 	requestTimeoutMs?: number;
-	/** Path to JSON Lines log file (default: ~/.pi/model-proxy-log.jsonl) */
+	/** Path to JSON Lines log file (default: ~/.pi/proxy-gateway-log.jsonl) */
 	logPath?: string;
 }
 

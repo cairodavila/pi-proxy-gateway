@@ -1,11 +1,10 @@
 /**
- * Pi 9Router Proxy Extension
+ * pi-proxy-gateway
  *
- * Exposes pi's authenticated models as a local OpenAI-compatible API server.
- * External services (Honcho, LangChain, custom apps, etc.) can call
- * http://localhost:PORT/v1/chat/completions or /v1/messages to use pi's models.
+ * Exposes the models pi can use, including subscription logins, as a local
+ * OpenAI-compatible and Anthropic-compatible API.
  *
- * See AGENTS.md and README.md for full documentation.
+ * Based on pi-model-proxy by BlackBelt Technology (MIT).
  */
 
 export { default } from "./src/extension.js";

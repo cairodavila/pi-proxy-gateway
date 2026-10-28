@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { eventToAnthropicSSE, eventToAnthropicResponse, AnthropicBlockTracker } from "../src/convert/piai-to-anthropic.js";
-import type { AssistantMessage, ToolCall } from "@mariozechner/pi-ai";
+import type { AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
 
 const MODEL = "test/model";
 const MSG_ID = "msg_test_123";

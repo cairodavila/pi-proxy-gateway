@@ -7,7 +7,8 @@ import type {
 	AssistantMessage,
 	TextContent,
 	ToolCall,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
+import { toAnthropicUsage } from "./usage.js";
 
 /**
  * Track content block indices for Anthropic SSE events.
@@ -134,7 +135,7 @@ export function eventToAnthropicSSE(
 			chunks.push(makeSSE("message_delta", {
 				type: "message_delta",
 				delta: { stop_reason: stopReason, stop_sequence: null },
-				usage: { output_tokens: msg.usage.output },
+				usage: toAnthropicUsage(msg.usage),
 			}));
 			chunks.push(makeSSE("message_stop", { type: "message_stop" }));
 			break;
@@ -179,9 +180,6 @@ export function eventToAnthropicResponse(finalMsg: AssistantMessage, model: stri
 		model,
 		stop_reason: stopReason,
 		stop_sequence: null,
-		usage: {
-			input_tokens: finalMsg.usage.input,
-			output_tokens: finalMsg.usage.output,
-		},
+		usage: toAnthropicUsage(finalMsg.usage),
 	};
 }

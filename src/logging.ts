@@ -7,7 +7,7 @@ import { dirname, join } from "path";
 import { homedir } from "os";
 import type { RequestLogEntry } from "./types.js";
 
-const DEFAULT_LOG_PATH = join(homedir(), ".pi", "model-proxy-log.jsonl");
+const DEFAULT_LOG_PATH = join(homedir(), ".pi", "proxy-gateway-log.jsonl");
 
 export interface LogRequestOptions {
 	method: string;

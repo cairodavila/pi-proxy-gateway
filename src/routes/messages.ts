@@ -3,8 +3,9 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "http";
-import type { AssistantMessage, Api, Model, SimpleStreamOptions } from "@mariozechner/pi-ai";
-import { streamSimple } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Api, Model } from "@earendil-works/pi-ai";
+import { streamSimple as piAiStreamSimple } from "@earendil-works/pi-ai/compat";
+import { toThinkingLevel, compact } from "../convert/usage.js";
 import type { ProxyConfig, AnthropicMessagesRequest } from "../types.js";
 import { resolveModelAlias } from "../config.js";
 import { convertAnthropicMessages, convertAnthropicTools } from "../convert/anthropic-to-piai.js";
@@ -65,13 +66,22 @@ export async function handleMessages(
 		context.tools = convertAnthropicTools(body.tools);
 	}
 
-	const streamOptions: SimpleStreamOptions = {
-		apiKey: authResult.apiKey,
-		headers: authResult.headers,
-		maxTokens: body.max_tokens,
-		temperature: body.temperature,
+	const b = body as any;
+	// Anthropic: thinking.type=enabled|adaptive (+ budget) and/or output_config.effort
+	let reasoning = toThinkingLevel(b.output_config?.effort);
+	if (!reasoning && (b.thinking?.type === "enabled" || b.thinking?.type === "adaptive")) {
+		const budget = Number(b.thinking?.budget_tokens) || 0;
+		reasoning = budget >= 32000 ? "xhigh" : budget >= 16000 ? "high" : budget >= 4000 ? "medium" : budget > 0 ? "low" : "high";
+	}
+	const streamOptions: any = compact({
+		maxTokens: b.max_tokens,
+		temperature: b.temperature,
+		reasoning,
 		signal,
-	} as any;
+	});
+	const streamSimple = typeof registry.streamSimple === "function"
+		? (m: Model<Api>, c: any, o: any) => registry.streamSimple(m, c, o)
+		: (m: Model<Api>, c: any, o: any) => piAiStreamSimple(m, c, { ...o, apiKey: authResult.apiKey, headers: authResult.headers });
 
 	const msgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 

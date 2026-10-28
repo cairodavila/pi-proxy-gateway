@@ -2,9 +2,9 @@
  * Extension lifecycle — entry point for pi
  */
 
-import type { Model, Api } from "@mariozechner/pi-ai";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { loadConfig, CONFIG_PATH } from "./config.js";
+import type { Model, Api } from "@earendil-works/pi-ai";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { loadConfig } from "./config.js";
 import { createProxyServer } from "./server.js";
 
 export default function (pi: ExtensionAPI) {
@@ -17,42 +17,60 @@ export default function (pi: ExtensionAPI) {
 		getModelRegistry: () => modelRegistry,
 	});
 
-	server.listen(config.port, () => {
-		console.log(`[model-proxy] API server listening on http://localhost:${config.port}`);
-		console.log(`[model-proxy] Endpoints:`);
-		console.log(`  GET  /v1/models             — List available models`);
-		console.log(`  POST /v1/chat/completions   — Chat completions (OpenAI-compatible)`);
-		console.log(`  POST /v1/messages           — Messages (Anthropic-compatible)`);
-		console.log(`  GET  /health                — Health check`);
-		if (config.defaultModel) {
-			console.log(`[model-proxy] Default model: ${config.defaultModel}`);
-		}
+	// Every pi instance loads this extension, but only one can own the port. The others
+	// retry quietly, so if the owner exits, another running instance takes over.
+	const RETRY_MS = 15000;
+	let listening = false;
+	let stopped = false;
+	let retryTimer: ReturnType<typeof setTimeout> | undefined;
+	let warned = false;
+
+	const tryListen = () => {
+		if (stopped) return;
+		server.listen(config.port, config.host || "127.0.0.1");
+	};
+
+	server.on("listening", () => {
+		listening = true;
+		console.log(`[proxy-gateway] API server listening on http://${config.host || "127.0.0.1"}:${config.port}${warned ? " (took over port)" : ""}`);
+		if (config.defaultModel) console.log(`[proxy-gateway] Default model: ${config.defaultModel}`);
 		if (config.aliases && Object.keys(config.aliases).length > 0) {
-			console.log(`[model-proxy] Aliases: ${Object.keys(config.aliases).join(", ")}`);
+			console.log(`[proxy-gateway] Aliases: ${Object.keys(config.aliases).join(", ")}`);
 		}
-		if (config.rateLimit) {
-			console.log(`[model-proxy] Rate limit: ${config.rateLimit} req/min`);
-		}
+		if (config.rateLimit) console.log(`[proxy-gateway] Rate limit: ${config.rateLimit} req/min`);
 	});
 
 	server.on("error", (err: any) => {
 		if (err.code === "EADDRINUSE") {
-			console.error(`[model-proxy] Port ${config.port} already in use. Change port in ${CONFIG_PATH}`);
+			if (!warned) {
+				console.log(`[proxy-gateway] Port ${config.port} owned by another pi instance; standing by.`);
+				warned = true;
+			}
+			if (!stopped) {
+				retryTimer = setTimeout(tryListen, RETRY_MS);
+				retryTimer.unref?.();
+			}
 		} else {
-			console.error(`[model-proxy] Server error: ${err.message}`);
+			console.error(`[proxy-gateway] Server error: ${err.message}`);
 		}
 	});
+
+	tryListen();
 
 	// Capture model registry on session start
 	pi.on("session_start", async (_event, ctx) => {
 		modelRegistry = ctx.modelRegistry;
-		console.log(`[model-proxy] Model registry loaded, ${(modelRegistry.getAvailable() as Model<Api>[]).length} models available`);
+		console.log(`[proxy-gateway] Model registry loaded, ${(modelRegistry.getAvailable() as Model<Api>[]).length} models available`);
 	});
 
 	// Shutdown server on exit
 	pi.on("session_shutdown", async () => {
-		server.close();
-		console.log(`[model-proxy] Server stopped`);
+		stopped = true;
+		if (retryTimer) clearTimeout(retryTimer);
+		if (listening) {
+			server.close();
+			console.log(`[proxy-gateway] Server stopped`);
+		}
 	});
 
 	// Register status command
@@ -62,7 +80,7 @@ export default function (pi: ExtensionAPI) {
 			const models = modelRegistry?.getAvailable() as Model<Api>[] | undefined;
 			const lines = [
 				`Model Proxy Status`,
-				`  Server: http://localhost:${config.port}`,
+				`  Server: http://${config.host || "127.0.0.1"}:${config.port} (${listening ? "this instance owns the port" : "standing by, another instance owns the port"})`,
 				`  Models: ${models?.length ?? "loading..."}`,
 			];
 			if (config.defaultModel) {

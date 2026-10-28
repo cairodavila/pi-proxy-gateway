@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { eventToSSEChunks, eventToNonStreamingResponse, ToolCallIndexTracker } from "../src/convert/piai-to-openai.js";
-import type { AssistantMessageEvent, AssistantMessage, ToolCall } from "@mariozechner/pi-ai";
+import type { AssistantMessageEvent, AssistantMessage, ToolCall } from "@earendil-works/pi-ai";
 
 const MODEL = "test/model";
 const MSG_ID = "test-123";
@@ -83,10 +83,11 @@ describe("eventToSSEChunks", () => {
 		expect(data.choices[0].finish_reason).toBe("tool_calls");
 	});
 
-	it("converts error event", () => {
-		const chunks = eventToSSEChunks({ type: "error", error: { errorMessage: "fail" } } as any, MODEL, MSG_ID, makeTracker());
-		expect(chunks).toHaveLength(2);
-		expect(chunks[1]).toBe("data: [DONE]\n\n");
+	it("converts error event into an error chunk, a stop chunk and [DONE]", () => {
+		const chunks = eventToSSEChunks({ type: "error", error: { errorMessage: "boom" } } as any, MODEL, MSG_ID, makeTracker());
+		expect(chunks).toHaveLength(3);
+		expect(JSON.parse(chunks[0].replace("data: ", "").trim()).error.message).toBe("boom");
+		expect(chunks[2]).toBe("data: [DONE]\n\n");
 	});
 });
 

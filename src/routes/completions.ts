@@ -3,12 +3,13 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "http";
-import type { AssistantMessage, Api, Model, SimpleStreamOptions } from "@mariozechner/pi-ai";
-import { streamSimple } from "@mariozechner/pi-ai";
+import type { AssistantMessage, Api, Model } from "@earendil-works/pi-ai";
+import { streamSimple as piAiStreamSimple } from "@earendil-works/pi-ai/compat";
 import type { ProxyConfig, OpenAIChatRequest } from "../types.js";
 import { resolveModelAlias } from "../config.js";
 import { convertOpenAIMessages, convertOpenAITools } from "../convert/openai-to-piai.js";
 import { eventToSSEChunks, eventToNonStreamingResponse, ToolCallIndexTracker } from "../convert/piai-to-openai.js";
+import { toOpenAIUsage, toThinkingLevel, toToolChoice, compact } from "../convert/usage.js";
 import { readBody, jsonResponse, errorResponse } from "../server.js";
 import { logRequest, type RequestLogger } from "../logging.js";
 
@@ -66,13 +67,28 @@ export async function handleCompletions(
 		context.tools = convertOpenAITools(body.tools);
 	}
 
-	const streamOptions: SimpleStreamOptions = {
-		apiKey: authResult.apiKey,
-		headers: authResult.headers,
-		maxTokens: body.max_tokens,
-		temperature: body.temperature,
+	const b = body as any;
+	const stop = typeof b.stop === "string" ? [b.stop] : Array.isArray(b.stop) ? b.stop : undefined;
+	const samplingParams = compact({ top_p: b.top_p, stop, seed: b.seed, frequency_penalty: b.frequency_penalty, presence_penalty: b.presence_penalty });
+	const streamOptions: any = compact({
+		maxTokens: b.max_completion_tokens ?? b.max_tokens,
+		temperature: b.temperature,
+		// OpenAI: reasoning_effort; OpenRouter-style clients: reasoning.effort
+		reasoning: toThinkingLevel(b.reasoning_effort ?? b.reasoning?.effort),
+		toolChoice: toToolChoice(b.tool_choice),
+		// Only OpenAI-compatible adapters read samplingParams; others ignore it.
+		samplingParams: Object.keys(samplingParams).length ? samplingParams : undefined,
+		// Stable per-conversation key → provider prompt caching (codex prompt_cache_key).
+		// Open WebUI sends X-OpenWebUI-Chat-Id when ENABLE_FORWARD_USER_INFO_HEADERS is on.
+		sessionId: headerValue(req, "x-openwebui-chat-id") || headerValue(req, "x-session-id"),
 		signal,
-	} as any;
+	});
+	// Prefer the registry: it resolves auth and runs extension-registered provider streams
+	// (e.g. pi-multi-account OAuth shaping). Fall back to raw pi-ai for older pi versions.
+	const streamSimple = typeof registry.streamSimple === "function"
+		? (m: Model<Api>, c: any, o: any) => registry.streamSimple(m, c, o)
+		: (m: Model<Api>, c: any, o: any) => piAiStreamSimple(m, c, { ...o, apiKey: authResult.apiKey, headers: authResult.headers });
+	const includeUsage = b.stream_options?.include_usage !== false;
 
 	const msgId = `proxy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -95,7 +111,7 @@ export async function handleCompletions(
 				logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 502, startTime, error: "No response from provider" });
 				return errorResponse(res, 502, "No response from provider");
 			}
-			logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 200, startTime, inputTokens: finalMessage.usage.input, outputTokens: finalMessage.usage.output });
+			logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 200, startTime, inputTokens: toOpenAIUsage(finalMessage.usage)?.prompt_tokens, outputTokens: finalMessage.usage.output });
 			return jsonResponse(res, 200, eventToNonStreamingResponse(finalMessage, modelSpec, msgId));
 		}
 
@@ -112,12 +128,12 @@ export async function handleCompletions(
 		for await (const event of eventStream) {
 			if (signal.aborted) break;
 			if (event.type === "done") lastMessage = event.message;
-			const sseChunks = eventToSSEChunks(event, modelSpec, msgId, tracker);
+			const sseChunks = eventToSSEChunks(event, modelSpec, msgId, tracker, includeUsage);
 			for (const chunk of sseChunks) {
 				res.write(chunk);
 			}
 		}
-		logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 200, startTime, inputTokens: lastMessage?.usage.input, outputTokens: lastMessage?.usage.output });
+		logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 200, startTime, inputTokens: toOpenAIUsage(lastMessage?.usage)?.prompt_tokens, outputTokens: lastMessage?.usage.output });
 		res.end();
 	} catch (err: any) {
 		if (signal.aborted) {
@@ -137,4 +153,8 @@ export async function handleCompletions(
 	}
 }
 
-
+function headerValue(req: IncomingMessage, name: string): string | undefined {
+	const v = req.headers[name];
+	const s = Array.isArray(v) ? v[0] : v;
+	return s && s.trim() ? s.trim() : undefined;
+}
