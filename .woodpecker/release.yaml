@@ -6,12 +6,12 @@ depends_on: [ci]
 
 steps:
   - name: publish
-    image: node:22-bookworm
+    image: node:24-bookworm
     environment:
       NPM_TOKEN:
         from_secret: npm_token
     commands:
       - test "v$(node -p 'require("./package.json").version')" = "$CI_COMMIT_TAG" || { echo "tag $CI_COMMIT_TAG != package.json version"; exit 1; }
-      - npm install --no-audit --no-fund --legacy-peer-deps
+      - npm install --no-audit --no-fund
       - echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
       - npm publish --access public
