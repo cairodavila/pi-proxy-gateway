@@ -1,0 +1,68 @@
+---
+# npmjs releases run on Woodpecker (.woodpecker/release.yaml).
+# On each v* tag this creates the GitHub release from CHANGELOG.md and
+# mirrors the package to GitHub Packages, whose npm scope must match the
+# owner: @cairodavila. GITHUB_TOKEN is issued by GitHub for each run.
+name: GitHub release
+
+"on":
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Tag matches package.json version
+        run: |
+          version="v$(node -p 'require("./package.json").version')"
+          test "$version" = "$GITHUB_REF_NAME" || {
+            echo "tag $GITHUB_REF_NAME != package.json $version"
+            exit 1
+          }
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 .github/release-notes.py "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" > notes.md
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "release $GITHUB_REF_NAME already exists"
+          else
+            gh release create "$GITHUB_REF_NAME" --title "pi-proxy-gateway ${GITHUB_REF_NAME#v}" --notes-file notes.md --verify-tag
+          fi
+
+  github-packages:
+    runs-on: ubuntu-latest
+    steps:
+      # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: '@cairodavila'
+          # release job: no shared dependency cache to poison
+          package-manager-cache: false
+      - run: npm install --no-audit --no-fund
+      - run: npm test
+      - run: npm pkg set name=@cairodavila/pi-proxy-gateway
+      - name: Publish (skip if this version is already there)
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if npm view "@cairodavila/pi-proxy-gateway@${GITHUB_REF_NAME#v}" version >/dev/null 2>&1; then
+            echo "already published"
+          else
+            npm publish
+          fi
