@@ -5,6 +5,6 @@ steps:
   - name: test
     image: node:22-bookworm
     commands:
-      - npm install --no-audit --no-fund
+      - npm install --no-audit --no-fund --legacy-peer-deps
       - npm run typecheck
       - npm test

@@ -129,7 +129,7 @@ The gateway gives whoever can reach the port the same model access you have in p
 ```bash
 git clone https://github.com/cairodavila/pi-proxy-gateway
 cd pi-proxy-gateway
-npm install
+npm install --legacy-peer-deps
 npm test
 npm run typecheck
 pi install .   # load your local copy instead of the npm one
