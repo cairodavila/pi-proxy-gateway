@@ -6,11 +6,11 @@
 - the README's development steps no longer need `--legacy-peer-deps`
 - CI and releases build on Node 24 (npm 11); a release skips publishing if that version is already on npm
 
-No code changes since 0.3.0.
+no code changes since 0.3.0.
 
 ## 0.3.0
 
-First release as `pi-proxy-gateway`. Forked from pi-model-proxy 0.2.0.
+first release as `pi-proxy-gateway`. forked from pi-model-proxy 0.2.0.
 
 - reasoning effort is passed to the model (OpenAI `reasoning_effort` and `reasoning.effort`, Anthropic `output_config.effort` and `thinking`)
 - `max_completion_tokens`, `top_p`, `stop`, `seed`, penalties and `tool_choice` are passed through
