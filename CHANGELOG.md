@@ -1,5 +1,13 @@
 # changelog
 
+## 0.3.1
+
+- package metadata: `engines.node` is `>=22.19.0`, the same range pi supports
+- the README's development steps no longer need `--legacy-peer-deps`
+- CI and releases build on Node 24 (npm 11); a release skips publishing if that version is already on npm
+
+No code changes since 0.3.0.
+
 ## 0.3.0
 
 First release as `pi-proxy-gateway`. Forked from pi-model-proxy 0.2.0.

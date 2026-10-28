@@ -14,4 +14,10 @@ steps:
       - test "v$(node -p 'require("./package.json").version')" = "$CI_COMMIT_TAG" || { echo "tag $CI_COMMIT_TAG != package.json version"; exit 1; }
       - npm install --no-audit --no-fund
       - echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
-      - npm publish --access public
+      # a re-run or a re-pushed tag shouldn't fail on a version that's already out
+      - |
+        if npm view "$(node -p 'require("./package.json").name')@${CI_COMMIT_TAG#v}" version >/dev/null 2>&1; then
+          echo "${CI_COMMIT_TAG#v} is already on npm, skipping publish"
+        else
+          npm publish --access public
+        fi

@@ -1,6 +1,6 @@
 {
   "name": "pi-proxy-gateway",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Use the models pi can reach, including your ChatGPT and Claude subscriptions, from any OpenAI- or Anthropic-compatible app.",
   "type": "module",
   "main": "index.ts",
