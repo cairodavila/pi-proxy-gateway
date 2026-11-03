@@ -62,10 +62,38 @@ export function toThinkingLevel(effort: unknown): string | undefined {
 	return undefined;
 }
 
-/** OpenAI accepts a string or { type: "function", function: { name } }; pi-ai only models auto/none. */
+// The values Codex accepts; anything else is rejected upstream with a 400.
+const REASONING_SUMMARIES = new Set(["auto", "concise", "detailed"]);
+
+/** Normalise a reasoning summary mode; undefined when unset or unknown. */
+export function toReasoningSummary(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	const v = value.trim().toLowerCase();
+	return REASONING_SUMMARIES.has(v) ? v : undefined;
+}
+
+/**
+ * onPayload hook for Responses-style payloads (OpenAI Codex, OpenAI/Azure Responses).
+ * pi-ai always asks for `reasoning.summary: "auto"`, and in auto mode the model often skips the
+ * summary, so clients see no reasoning. Swap "auto" for the configured mode; payloads without a
+ * `reasoning.summary` field (Anthropic, chat completions, OpenRouter) are left alone.
+ */
+export function reasoningSummaryHook(summary: string | undefined) {
+	if (!summary || summary === "auto") return undefined;
+	return (payload: any) => {
+		const r = payload?.reasoning;
+		if (r && typeof r === "object" && r.summary === "auto") r.summary = summary;
+		return payload;
+	};
+}
+
+/**
+ * pi-ai only models auto/none. Accepts OpenAI strings and Anthropic `{ type }` objects; anything
+ * else (required/any, a named tool) is left to the passthrough hook, which sends it as is.
+ */
 export function toToolChoice(choice: unknown): "auto" | "none" | undefined {
-	if (choice === "auto" || choice === "none") return choice;
-	if (choice === "required") return "auto";
+	const value = (choice as any)?.type ?? choice;
+	if (value === "auto" || value === "none") return value;
 	return undefined;
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import http from "http";
-import { createProxyServer } from "../src/server.js";
+import { createProxyServer, providerErrorStatus } from "../src/server.js";
 import type { ProxyConfig } from "../src/types.js";
 
 function makeRequest(port: number, method: string, path: string, options: { body?: any; headers?: Record<string, string> } = {}): Promise<{ status: number; headers: http.IncomingHttpHeaders; body: any }> {
@@ -114,5 +114,18 @@ describe("Server with rate limiting", () => {
 		// Rate limit is already exceeded from above test
 		const res = await makeRequest(port, "GET", "/health");
 		expect(res.status).toBe(200);
+	});
+});
+
+describe("providerErrorStatus", () => {
+	it("passes the provider's 4xx on, except auth, and maps the rest to 502", () => {
+		expect(providerErrorStatus('400 {"type":"error"}')).toBe(400);
+		expect(providerErrorStatus("422 Unprocessable")).toBe(422);
+		expect(providerErrorStatus("429 rate limited")).toBe(429);
+		expect(providerErrorStatus("401 invalid x-api-key")).toBe(502);
+		expect(providerErrorStatus("403 forbidden")).toBe(502);
+		expect(providerErrorStatus("500 overloaded")).toBe(502);
+		expect(providerErrorStatus("socket hang up")).toBe(502);
+		expect(providerErrorStatus(undefined)).toBe(502);
 	});
 });

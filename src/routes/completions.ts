@@ -9,8 +9,9 @@ import type { ProxyConfig, OpenAIChatRequest } from "../types.js";
 import { resolveModelAlias } from "../config.js";
 import { convertOpenAIMessages, convertOpenAITools } from "../convert/openai-to-piai.js";
 import { eventToSSEChunks, eventToNonStreamingResponse, ToolCallIndexTracker } from "../convert/piai-to-openai.js";
-import { toOpenAIUsage, toThinkingLevel, toToolChoice, compact } from "../convert/usage.js";
-import { readBody, jsonResponse, errorResponse } from "../server.js";
+import { toOpenAIUsage, toThinkingLevel, toToolChoice, toReasoningSummary, reasoningSummaryHook, compact } from "../convert/usage.js";
+import { planPassthrough, chainHooks, UnsupportedParamError, type Passthrough } from "../convert/passthrough.js";
+import { readBody, jsonResponse, errorResponse, providerErrorStatus } from "../server.js";
 import { logRequest, type RequestLogger } from "../logging.js";
 
 export async function handleCompletions(
@@ -55,6 +56,16 @@ export async function handleCompletions(
 	}
 
 	// Resolve API key
+	// Fields the route doesn't convert: forwarded as is, translated, or rejected with a 400.
+	let passthrough: Passthrough;
+	try {
+		passthrough = planPassthrough("openai", body as any, model.api);
+	} catch (err) {
+		if (!(err instanceof UnsupportedParamError)) throw err;
+		logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 400, startTime, error: err.message });
+		return errorResponse(res, 400, err.message);
+	}
+
 	const authResult = await registry.getApiKeyAndHeaders(model);
 	if (!authResult.ok) {
 		return errorResponse(res, 401, `No API key for model "${modelSpec}": ${authResult.error}`);
@@ -81,6 +92,8 @@ export async function handleCompletions(
 		// Stable per-conversation key → provider prompt caching (codex prompt_cache_key).
 		// Open WebUI sends X-OpenWebUI-Chat-Id when ENABLE_FORWARD_USER_INFO_HEADERS is on.
 		sessionId: headerValue(req, "x-openwebui-chat-id") || headerValue(req, "x-session-id"),
+		// Codex/Responses: request reasoning.summary overrides the configured summary mode.
+		onPayload: chainHooks(passthrough.hook, reasoningSummaryHook(toReasoningSummary(b.reasoning?.summary) ?? toReasoningSummary(config.reasoningSummary))),
 		signal,
 	});
 	// Prefer the registry: it resolves auth and runs extension-registered provider streams
@@ -103,37 +116,46 @@ export async function handleCompletions(
 				if (event.type === "done") {
 					finalMessage = event.message;
 				} else if (event.type === "error") {
-					logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 502, startTime, error: event.error.errorMessage });
-					return errorResponse(res, 502, event.error.errorMessage || "Provider error");
+					const status = providerErrorStatus(event.error.errorMessage);
+					logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, passthrough: passthrough.fields, status, startTime, error: event.error.errorMessage });
+					return errorResponse(res, status, event.error.errorMessage || "Provider error");
 				}
 			}
 			if (!finalMessage) {
-				logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 502, startTime, error: "No response from provider" });
+				logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, passthrough: passthrough.fields, status: 502, startTime, error: "No response from provider" });
 				return errorResponse(res, 502, "No response from provider");
 			}
-			logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 200, startTime, inputTokens: toOpenAIUsage(finalMessage.usage)?.prompt_tokens, outputTokens: finalMessage.usage.output });
+			logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, passthrough: passthrough.fields, status: 200, startTime, inputTokens: toOpenAIUsage(finalMessage.usage)?.prompt_tokens, outputTokens: finalMessage.usage.output });
 			return jsonResponse(res, 200, eventToNonStreamingResponse(finalMessage, modelSpec, msgId));
 		}
 
-		// Streaming
-		res.writeHead(200, {
+		// Streaming. Headers wait for the first event: pi-ai only starts once the provider accepted
+		// the request, so a rejected request still gets its real status instead of a 200 stream.
+		const sseHeaders = {
 			"Content-Type": "text/event-stream",
 			"Cache-Control": "no-cache",
 			"Connection": "keep-alive",
 			"Access-Control-Allow-Origin": config.allowedOrigins?.join(",") || "*",
-		});
+		};
 
 		const tracker = new ToolCallIndexTracker();
 		let lastMessage: AssistantMessage | undefined;
 		for await (const event of eventStream) {
 			if (signal.aborted) break;
+			if (event.type === "error" && !res.headersSent) {
+				const status = providerErrorStatus(event.error.errorMessage);
+				logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, passthrough: passthrough.fields, status, startTime, error: event.error.errorMessage });
+				return errorResponse(res, status, event.error.errorMessage || "Provider error");
+			}
+			if (!res.headersSent) res.writeHead(200, sseHeaders);
 			if (event.type === "done") lastMessage = event.message;
 			const sseChunks = eventToSSEChunks(event, modelSpec, msgId, tracker, includeUsage);
 			for (const chunk of sseChunks) {
 				res.write(chunk);
 			}
 		}
-		logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 200, startTime, inputTokens: toOpenAIUsage(lastMessage?.usage)?.prompt_tokens, outputTokens: lastMessage?.usage.output });
+		if (!res.headersSent) res.writeHead(200, sseHeaders);
+		logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, passthrough: passthrough.fields, status: 200, startTime, inputTokens: toOpenAIUsage(lastMessage?.usage)?.prompt_tokens, outputTokens: lastMessage?.usage.output });
 		res.end();
 	} catch (err: any) {
 		if (signal.aborted) {
@@ -144,8 +166,9 @@ export async function handleCompletions(
 			return;
 		}
 		if (!res.headersSent) {
-			logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, status: 502, startTime, error: err.message });
-			return errorResponse(res, 502, `Provider error: ${err.message}`);
+			const status = providerErrorStatus(err.message);
+			logRequest(logger, { method: "POST", path: "/v1/chat/completions", model: modelSpec, passthrough: passthrough.fields, status, startTime, error: err.message });
+			return errorResponse(res, status, `Provider error: ${err.message}`);
 		}
 		res.write(`data: ${JSON.stringify({ error: { message: err.message } })}\n\n`);
 		res.write("data: [DONE]\n\n");

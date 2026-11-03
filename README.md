@@ -84,13 +84,39 @@ there's no `/v1/responses` endpoint. use chat completions.
 
 ## what gets passed through
 
-- **messages** with text, images, tool calls and tool results
-- **tools**, and `tool_choice` as `auto` or `none`
+the gateway converts these itself:
+
+- **messages** with text, images, tool calls and tool results, and **tools**
 - **reasoning**: `reasoning_effort` (or `reasoning.effort`) from OpenAI clients, `output_config.effort` or `thinking` from Anthropic clients. pi clamps it to what each model supports. if you don't send it, pi uses the model's default.
-- **limits and sampling**: `max_tokens`, `max_completion_tokens`, `temperature`, `top_p`, `stop`, `seed`, frequency and presence penalties. not every provider uses every setting.
+- **max tokens**: `max_tokens` or `max_completion_tokens`. pi sends whichever field the provider wants.
 - **usage**: `prompt_tokens` includes cached tokens, with `cached_tokens`, `reasoning_tokens` and pi's cost estimate in the details. set `stream_options.include_usage` to `false` to skip it.
 
-errors from the provider are sent as an error chunk in the stream, so a failed request doesn't look like an empty answer.
+every other field is passed on, never dropped silently:
+
+- **same format** (an Anthropic request to an Anthropic model, an OpenAI chat request to an OpenAI-compatible model such as OpenRouter): the field is copied into the request pi sends, as is. objects are merged, so `output_config.format` sits next to pi's `effort`. a named `tool_choice` follows Claude Code's tool name casing on Anthropic logins. fields like `tool_choice`, `response_format`, `logit_bias`, `user`, `metadata`, `top_k`, `stop_sequences`, `service_tier` and per-tool `strict` all reach the provider, and so does anything new the provider adds later.
+- **different format**: the gateway translates what has a clear equivalent and answers **400 naming the field** for anything else, so the client can fall back.
+
+| client field | Anthropic model | OpenAI-compatible model | Responses / Codex model |
+| --- | --- | --- | --- |
+| `response_format` json_schema / `output_config.format` | `output_config.format` | `response_format` (strict) | `text.format` |
+| `response_format` json_object | 400 | `response_format` | `text.format` |
+| `tool_choice` required / any, named tool | `any`, `tool` | `required`, `function` | `required`, `function` |
+| `parallel_tool_calls: false` / `disable_parallel_tool_use` | `disable_parallel_tool_use` | `parallel_tool_calls` | `parallel_tool_calls` |
+| `stop` / `stop_sequences` | `stop_sequences` | `stop` | 400 |
+| `top_p`, `temperature` | same | same | same |
+| `user` / `metadata.user_id` | `metadata.user_id` | `user` | `user` |
+| `seed`, penalties, `logit_bias`, `top_k` | 400 | 400 for `top_k` | 400 |
+| OpenAI `metadata`, `store`, `service_tier`, `prompt_cache_key`, `verbosity` | 400 | (same format) | passed on (`verbosity` as `text.verbosity`) |
+
+other APIs (Google, Mistral, Bedrock, Cursor…) take `temperature` and `tool_choice` `auto`/`none` through pi; any other extra field gets a 400 there. values that only ask for the default (`n: 1`, `parallel_tool_calls: true`, penalties of `0`, `response_format: text`) are fine everywhere, and so are Open WebUI's "Continue" flags (`continue_final_message`, `add_generation_prompt`).
+
+for every model, `n` above 1, `logprobs`, `top_logprobs`, audio `modalities` and `audio` get a 400: the gateway returns one choice of text and tool calls and can't relay the rest.
+
+`temperature` is sent even when pi would leave it out (models that reject it, or with extended thinking), so the provider's error reaches you instead of the setting vanishing. Claude Haiku 5.5, for example, rejects it.
+
+forwarded fields are listed under `passthrough` in the request log.
+
+when the provider rejects a request with a 4xx (a bad parameter, a rate limit), the client gets that status and the provider's message, streaming or not, so it can fall back or back off. provider auth failures (401/403, the gateway's own login) and other failures are a 502. an error after the answer has started streaming is sent as an error chunk in the stream, so a failed request doesn't look like an empty answer.
 
 ## running several pi instances
 

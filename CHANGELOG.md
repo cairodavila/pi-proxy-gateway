@@ -1,5 +1,15 @@
 # changelog
 
+## unreleased
+
+- request fields the gateway doesn't convert are no longer dropped silently. for the same wire format (Anthropic request to an Anthropic model, OpenAI chat request to an OpenAI-compatible model) they are copied into the provider request, merged with what pi sends (`output_config.format` next to `effort`, per-tool `strict`, `top_k`, `stop_sequences`, `logit_bias`, `metadata` and so on). across formats, fields with an equivalent are translated (`response_format` ↔ `output_config.format` / `text.format`, `tool_choice`, `parallel_tool_calls`, `stop`, `user`) and any other field gets a 400 that names it, so clients such as Hindsight can fall back
+- `tool_choice: "required"` and named tools are sent as such instead of becoming `auto`; a named tool follows Claude Code's tool name casing on Anthropic logins
+- `temperature` reaches the provider even for models pi would leave it out for, so their error is shown instead of the setting vanishing
+- `n` above 1, `logprobs`, `top_logprobs` and audio output get a 400; the gateway can only return one choice of text and tool calls
+- the request log lists forwarded fields under `passthrough`
+- a provider 4xx (other than 401/403) reaches the client with its status instead of a 502, streaming or not; the stream's headers wait until the provider accepted the request
+- new `reasoningSummary` option (`auto`, `concise` or `detailed`, default `detailed`) for Responses-API models such as Codex; a request's `reasoning.summary` overrides it
+
 ## 0.3.1
 
 - package metadata: `engines.node` is `>=22.19.0`, the same range pi supports

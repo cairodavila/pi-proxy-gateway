@@ -18,6 +18,8 @@ export interface LogRequestOptions {
 	inputTokens?: number;
 	outputTokens?: number;
 	error?: string;
+	/** Client fields forwarded or translated beyond what the route converts itself. */
+	passthrough?: string[];
 }
 
 /**
@@ -36,6 +38,7 @@ export function logRequest(logger: RequestLogger | null, opts: LogRequestOptions
 	if (opts.inputTokens !== undefined) entry.input_tokens = opts.inputTokens;
 	if (opts.outputTokens !== undefined) entry.output_tokens = opts.outputTokens;
 	if (opts.error) entry.error = opts.error;
+	if (opts.passthrough?.length) entry.passthrough = opts.passthrough;
 	logger.log(entry);
 }
 

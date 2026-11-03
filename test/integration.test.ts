@@ -453,10 +453,95 @@ describe("Integration: registry.streamSimple path + option passthrough", () => {
 		expect(last.choices[0].finish_reason).toBe("stop");
 	});
 
+	it("translates Anthropic output_config.format for an openai-completions model through onPayload", async () => {
+		const schema = { type: "object", properties: { a: { type: "string" } } };
+		const res = await request(port, "POST", "/v1/messages", {
+			body: { model: "test-provider/test-model", max_tokens: 100, messages: [{ role: "user", content: "hi" }], output_config: { format: { type: "json_schema", schema } }, stop_sequences: ["X"] },
+		});
+		expect(res.status).toBe(200);
+		const payload = await captured!.options.onPayload({ model: "test-model", messages: [], stream: true });
+		expect(payload.response_format).toEqual({ type: "json_schema", json_schema: { name: "response", schema, strict: true } });
+		expect(payload.stop).toEqual(["X"]);
+	});
+
+	it("passes OpenAI response_format through onPayload for an openai-completions model", async () => {
+		const rf = { type: "json_schema", json_schema: { name: "r", schema: { type: "object" }, strict: true } };
+		await request(port, "POST", "/v1/chat/completions", {
+			body: { model: "test-provider/test-model", messages: [{ role: "user", content: "hi" }], response_format: rf, logit_bias: { "1": 5 }, stream: false },
+		});
+		const payload = await captured!.options.onPayload({ model: "test-model", messages: [], stream: true });
+		expect(payload).toMatchObject({ response_format: rf, logit_bias: { "1": 5 }, model: "test-model", stream: true });
+	});
+
+	it("answers 400 naming a field that can't be relayed, without calling the provider", async () => {
+		captured = undefined;
+		const res = await request(port, "POST", "/v1/messages", {
+			body: { model: "test-provider/test-model", max_tokens: 100, messages: [{ role: "user", content: "hi" }], top_k: 5 },
+		});
+		expect(res.status).toBe(400);
+		expect(JSON.parse(res.body).error.message).toContain('"top_k"');
+		expect(captured).toBeUndefined();
+
+		const chat = await request(port, "POST", "/v1/chat/completions", {
+			body: { model: "test-provider/test-model", messages: [{ role: "user", content: "hi" }], n: 3 },
+		});
+		expect(chat.status).toBe(400);
+		expect(JSON.parse(chat.body).error.message).toContain('"n"');
+		expect(captured).toBeUndefined();
+	});
+
 	it("maps Anthropic output_config.effort on /v1/messages", async () => {
 		await request(port, "POST", "/v1/messages", {
 			body: { model: "test-provider/test-model", max_tokens: 1000, messages: [{ role: "user", content: "hi" }], output_config: { effort: "max" } },
 		});
 		expect(captured!.options.reasoning).toBe("max");
+	});
+});
+
+describe("Integration: provider error status", () => {
+	let server: http.Server;
+	const port = 29881;
+	let events: any[] = [];
+	const usage = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+	const fail = (errorMessage: string) => ({ type: "error", reason: "error", error: { role: "assistant", content: [], stopReason: "error", errorMessage, usage } });
+	const ANTHROPIC_400 = '400 {"type":"error","error":{"type":"invalid_request_error","message":"output_config.format.type: Input should be \'json_schema\'"}}';
+
+	beforeAll(async () => {
+		const registry = { ...createMockRegistry(), streamSimple: () => (async function* () { for (const e of events) yield e; })() };
+		server = createProxyServer({ config: { port }, getModelRegistry: () => registry });
+		await new Promise<void>((r) => server.listen(port, r));
+	});
+	afterAll(async () => {
+		await new Promise<void>((r) => server.close(() => r()));
+	});
+
+	const chat = (stream: boolean) => request(port, "POST", "/v1/chat/completions", { body: { model: "test-provider/test-model", messages: [{ role: "user", content: "hi" }], stream } });
+	const messages = (stream: boolean) => request(port, "POST", "/v1/messages", { body: { model: "test-provider/test-model", max_tokens: 10, messages: [{ role: "user", content: "hi" }], stream } });
+
+	it("passes a provider 400 on, streaming or not, so clients can fall back", async () => {
+		events = [fail(ANTHROPIC_400)];
+		for (const res of [await chat(false), await chat(true), await messages(false), await messages(true)]) {
+			expect(res.status).toBe(400);
+			expect(res.headers["content-type"]).toContain("application/json");
+			expect(JSON.parse(res.body).error.message).toContain("json_schema");
+		}
+	});
+
+	it("keeps 502 for provider auth failures and non-HTTP errors", async () => {
+		events = [fail("401 invalid x-api-key")];
+		expect((await messages(false)).status).toBe(502);
+		events = [fail("socket hang up")];
+		expect((await chat(true)).status).toBe(502);
+	});
+
+	it("keeps an error that arrives after output in the 200 stream", async () => {
+		events = [
+			{ type: "start", partial: { role: "assistant", content: [] } },
+			{ type: "text_delta", delta: "par", partial: { role: "assistant", content: [{ type: "text", text: "par" }] } },
+			fail("500 overloaded"),
+		];
+		const res = await chat(true);
+		expect(res.status).toBe(200);
+		expect(res.body).toContain("overloaded");
 	});
 });

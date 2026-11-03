@@ -44,7 +44,10 @@ describe("request option mapping", () => {
 	});
 	it("maps tool_choice to auto/none", () => {
 		expect(toToolChoice("none")).toBe("none");
-		expect(toToolChoice("required")).toBe("auto");
+		// required/named are sent as is by the passthrough hook, not downgraded to auto
+		expect(toToolChoice("required")).toBeUndefined();
+		expect(toToolChoice({ type: "none" })).toBe("none");
+		expect(toToolChoice({ type: "any" })).toBeUndefined();
 		expect(toToolChoice({ type: "function", function: { name: "x" } })).toBeUndefined();
 	});
 	it("compact drops undefined values", () => {

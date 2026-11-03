@@ -15,6 +15,7 @@ export const DEFAULT_CONFIG: ProxyConfig = {
 	port: 9876,
 	host: "127.0.0.1",
 	requestTimeoutMs: 1800000,
+	reasoningSummary: "detailed",
 };
 
 /**

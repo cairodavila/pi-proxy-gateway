@@ -25,6 +25,8 @@ export interface ProxyConfig {
 	requestTimeoutMs?: number;
 	/** Path to JSON Lines log file (default: ~/.pi/proxy-gateway-log.jsonl) */
 	logPath?: string;
+	/** Reasoning summary mode for Responses-API models such as Codex: auto, concise or detailed (default) */
+	reasoningSummary?: string;
 }
 
 // =============================================================================
@@ -67,6 +69,7 @@ export interface OpenAITool {
 		name: string;
 		description?: string;
 		parameters?: any;
+		strict?: boolean;
 	};
 }
 
@@ -134,6 +137,7 @@ export interface AnthropicTool {
 	name: string;
 	description?: string;
 	input_schema: any;
+	strict?: boolean;
 }
 
 // =============================================================================
@@ -150,4 +154,5 @@ export interface RequestLogEntry {
 	input_tokens?: number;
 	output_tokens?: number;
 	error?: string;
+	passthrough?: string[];
 }

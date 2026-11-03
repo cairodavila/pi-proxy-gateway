@@ -57,6 +57,7 @@ export function convertOpenAITools(tools: OpenAITool[]): Context["tools"] {
 		name: t.function.name,
 		description: t.function.description || "",
 		parameters: t.function.parameters || { type: "object", properties: {} },
+		...(t.function.strict === true ? { constrainedSampling: { type: "json_schema" as const, strict: "require" as const } } : {}),
 	}));
 }
 

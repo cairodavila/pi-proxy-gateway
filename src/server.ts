@@ -33,6 +33,16 @@ export function jsonResponse(res: ServerResponse, status: number, body: any, ext
 	res.end(JSON.stringify(body));
 }
 
+/**
+ * HTTP status for a provider failure. pi-ai starts the message with the provider's status
+ * ("400 {...}"). A 4xx is about the client's request, so it is passed on (clients such as Hindsight
+ * fall back on a 400); 401/403 concern the gateway's own upstream login, and the rest is a 502.
+ */
+export function providerErrorStatus(message: string | undefined): number {
+	const status = Number(/^(4\d\d)\b/.exec(message ?? "")?.[1]);
+	return status && status !== 401 && status !== 403 ? status : 502;
+}
+
 export function errorResponse(res: ServerResponse, status: number, message: string, extraHeaders?: Record<string, string>): void {
 	jsonResponse(res, status, { error: { message, type: "error", code: status } }, extraHeaders);
 }

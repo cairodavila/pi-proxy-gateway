@@ -48,6 +48,7 @@ export function convertAnthropicTools(tools: AnthropicTool[]): Context["tools"] 
 		name: t.name,
 		description: t.description || "",
 		parameters: t.input_schema || { type: "object", properties: {} },
+		...(t.strict === true ? { constrainedSampling: { type: "json_schema" as const, strict: "require" as const } } : {}),
 	}));
 }
 
