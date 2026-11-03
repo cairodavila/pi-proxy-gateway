@@ -1,6 +1,6 @@
 # changelog
 
-## unreleased
+## 0.4.0
 
 - request fields the gateway doesn't convert are no longer dropped silently. for the same wire format (Anthropic request to an Anthropic model, OpenAI chat request to an OpenAI-compatible model) they are copied into the provider request, merged with what pi sends (`output_config.format` next to `effort`, per-tool `strict`, `top_k`, `stop_sequences`, `logit_bias`, `metadata` and so on). across formats, fields with an equivalent are translated (`response_format` ↔ `output_config.format` / `text.format`, `tool_choice`, `parallel_tool_calls`, `stop`, `user`) and any other field gets a 400 that names it, so clients such as Hindsight can fall back
 - `tool_choice: "required"` and named tools are sent as such instead of becoming `auto`; a named tool follows Claude Code's tool name casing on Anthropic logins

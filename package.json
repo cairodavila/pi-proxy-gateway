@@ -1,6 +1,6 @@
 {
   "name": "pi-proxy-gateway",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "use the models pi can reach, with API keys or OAuth logins, from any OpenAI- or Anthropic-compatible app.",
   "type": "module",
   "main": "index.ts",
