@@ -9,6 +9,8 @@
 - the request log lists forwarded fields under `passthrough`
 - a provider 4xx (other than 401/403) reaches the client with its status instead of a 502, streaming or not; the stream's headers wait until the provider accepted the request
 - new `reasoningSummary` option (`auto`, `concise` or `detailed`, default `detailed`) for Responses-API models such as Codex; a request's `reasoning.summary` overrides it
+- OpenAI-format usage adds `cost_from_provider: true` when `cost` is the provider's billed amount rather than pi's estimate (pi 1.5.0+)
+- tests and type checks run against pi 1.5.0
 
 ## 0.3.1
 

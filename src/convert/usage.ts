@@ -27,9 +27,10 @@ export function toOpenAIUsage(usage: Usage | undefined): Record<string, any> | u
 		prompt_tokens_details: { cached_tokens: cacheRead },
 		completion_tokens_details: { reasoning_tokens: usage.reasoning || 0 },
 	};
-	// Non-standard but harmless: lets clients see cache writes and pi-ai's cost estimate.
+	// Non-standard but harmless: lets clients see cache writes and cost (billed when the provider reports it, else pi-ai's estimate).
 	if (cacheWrite) out.prompt_tokens_details.cache_creation_tokens = cacheWrite;
 	if (usage.cost?.total) out.cost = usage.cost.total;
+	if (usage.cost?.totalFromProvider) out.cost_from_provider = true;
 	return out;
 }
 

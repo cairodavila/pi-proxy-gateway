@@ -89,7 +89,7 @@ the gateway converts these itself:
 - **messages** with text, images, tool calls and tool results, and **tools**
 - **reasoning**: `reasoning_effort` (or `reasoning.effort`) from OpenAI clients, `output_config.effort` or `thinking` from Anthropic clients. pi clamps it to what each model supports. if you don't send it, pi uses the model's default.
 - **max tokens**: `max_tokens` or `max_completion_tokens`. pi sends whichever field the provider wants.
-- **usage**: `prompt_tokens` includes cached tokens, with `cached_tokens`, `reasoning_tokens` and pi's cost estimate in the details. set `stream_options.include_usage` to `false` to skip it.
+- **usage**: `prompt_tokens` includes cached tokens, with `cached_tokens`, `reasoning_tokens` and `cost` in the details. `cost` is the billed amount when the provider reports one (then `cost_from_provider: true`), otherwise pi's estimate. set `stream_options.include_usage` to `false` to skip it.
 
 every other field is passed on, never dropped silently:
 

@@ -14,6 +14,11 @@ describe("toOpenAIUsage", () => {
 		expect(u.prompt_tokens_details.cache_creation_tokens).toBe(400);
 		expect(u.completion_tokens_details.reasoning_tokens).toBe(30);
 		expect(u.cost).toBe(0.0123);
+		expect(u.cost_from_provider).toBeUndefined();
+	});
+	it("flags a provider-billed cost", () => {
+		const u = toOpenAIUsage({ ...usage, cost: { ...usage.cost, totalFromProvider: true } })!;
+		expect(u.cost_from_provider).toBe(true);
 	});
 	it("handles missing usage", () => {
 		expect(toOpenAIUsage(undefined)).toBeUndefined();
