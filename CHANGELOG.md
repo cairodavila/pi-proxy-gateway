@@ -1,6 +1,6 @@
 # changelog
 
-## unreleased
+## 0.4.1
 
 - per-tool `strict` no longer gets a 400 on models outside the Anthropic, OpenAI chat and Responses APIs (Google, Mistral, Bedrock, extension providers such as antigravity-acp). pi applies it where the API supports it and skips it where it doesn't
 
