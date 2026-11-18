@@ -277,7 +277,8 @@ function translateToolExtras(format: ClientFormat, target: Family, map: Map<stri
 		if (strict === undefined) continue;
 		if (target === "openai") entry.fn = { strict };
 		else if (target === "anthropic" || target === "responses") entry.top = { strict };
-		else fail(`${prefix}.strict`, api);
+		// Other APIs: the tool converters already carry strict as pi-ai's constrainedSampling,
+		// which each adapter applies (Google, Mistral, Bedrock) or ignores (extension providers).
 	}
 }
 

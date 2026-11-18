@@ -108,7 +108,7 @@ every other field is passed on, never dropped silently:
 | `seed`, penalties, `logit_bias`, `top_k` | 400 | 400 for `top_k` | 400 |
 | OpenAI `metadata`, `store`, `service_tier`, `prompt_cache_key`, `verbosity` | 400 | (same format) | passed on (`verbosity` as `text.verbosity`) |
 
-other APIs (Google, Mistral, Bedrock, Cursor…) take `temperature` and `tool_choice` `auto`/`none` through pi; any other extra field gets a 400 there. values that only ask for the default (`n: 1`, `parallel_tool_calls: true`, penalties of `0`, `response_format: text`) are fine everywhere, and so are Open WebUI's "Continue" flags (`continue_final_message`, `add_generation_prompt`).
+other APIs (Google, Mistral, Bedrock, Cursor…) take `temperature`, `tool_choice` `auto`/`none` and per-tool `strict` through pi (pi applies `strict` where the API supports it and skips it where it doesn't); any other extra field gets a 400 there. values that only ask for the default (`n: 1`, `parallel_tool_calls: true`, penalties of `0`, `response_format: text`) are fine everywhere, and so are Open WebUI's "Continue" flags (`continue_final_message`, `add_generation_prompt`).
 
 for every model, `n` above 1, `logprobs`, `top_logprobs`, audio `modalities` and `audio` get a 400: the gateway returns one choice of text and tool calls and can't relay the rest.
 

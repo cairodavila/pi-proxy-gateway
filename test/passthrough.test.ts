@@ -182,6 +182,13 @@ describe("different wire format", () => {
 		rejects("openai", { messages: [], tool_choice: "required" }, "google-generative-ai", "tool_choice");
 		rejects("anthropic", { messages: [], max_tokens: 1, top_p: 0.5 }, "cursor-agent", "top_p");
 	});
+
+	it("other APIs: per-tool strict is left to pi-ai's constrainedSampling, not rejected", () => {
+		const tools = [{ type: "function", function: { name: "lookup", parameters: {}, strict: true } }];
+		expect(planPassthrough("openai", { messages: [], tools }, "antigravity-acp").hook).toBeUndefined();
+		expect(planPassthrough("anthropic", { messages: [], max_tokens: 1, tools: [{ name: "lookup", input_schema: {}, strict: true }] }, "google-generative-ai").hook).toBeUndefined();
+		rejects("openai", { messages: [], tools: [{ type: "function", function: { name: "lookup", parameters: {}, foo: 1 } }] }, "google-generative-ai", "tools[0].function.foo");
+	});
 });
 
 describe("chainHooks", () => {
